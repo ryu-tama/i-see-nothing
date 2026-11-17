@@ -1,15 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { animate, stagger } from "animejs";
 import { encryptSecret } from "@/src/lib/crypto";
 
 export default function HomePage() {
   const [secretText, setSecretText] = useState("");
-  const [ttlSeconds, setTtlSeconds] = useState(3600); // Default 1 jam
+  const [ttlSeconds, setTtlSeconds] = useState(3600);
   const [generatedLink, setGeneratedLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      animate(containerRef.current.querySelectorAll(".animate-item"), {
+        translateY: [20, 0],
+        opacity: [0, 1],
+        duration: 700,
+        delay: stagger(90),
+        ease: "outExpo",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (generatedLink && resultRef.current) {
+      animate(resultRef.current, {
+        scale: [0.95, 1],
+        opacity: [0, 1],
+        duration: 500,
+        ease: "outBack",
+      });
+    }
+  }, [generatedLink]);
 
   async function handleCreateSecret(e: React.FormEvent) {
     e.preventDefault();
@@ -19,10 +46,8 @@ export default function HomePage() {
     setError("");
 
     try {
-      // 1. Enkripsi teks di dalam browser (Server tidak pernah melihat teks asli)
       const { ciphertext, iv, keyString } = await encryptSecret(secretText);
 
-      // 2. Kirim HANYA ciphertext & iv ke server
       const res = await fetch("/api/secrets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,11 +57,9 @@ export default function HomePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal membuat tautan rahasia.");
 
-      // 3. Susun URL lengkap dengan kunci dekripsi di bagian fragment (#)
-      // Bagian setelah '#' tidak pernah dikirim ke server oleh browser
       const fullUrl = `${window.location.origin}/secret/${data.id}#${keyString}`;
       setGeneratedLink(fullUrl);
-      setSecretText(""); // Bersihkan input setelah selesai
+      setSecretText("");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
     } finally {
@@ -52,15 +75,18 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+      <div
+        ref={containerRef}
+        className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl"
+      >
         <div className="mb-6">
-          <div className="inline-block px-3 py-1 text-xs font-semibold tracking-wider text-sky-400 uppercase bg-sky-950/60 border border-sky-800/50 rounded-full mb-3">
+          <div className="animate-item opacity-0 inline-block px-3 py-1 text-xs font-semibold tracking-wider text-sky-400 uppercase bg-sky-950/60 border border-sky-800/50 rounded-full mb-3">
             Zero-Knowledge • End-to-End Encrypted
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">
+          <h1 className="animate-item opacity-0 text-2xl sm:text-3xl font-bold text-white">
             BurnNote
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="animate-item opacity-0 text-slate-400 text-sm mt-1">
             Kirim password, API key, atau catatan sensitif. Pesan dienkripsi di
             browser-mu dan langsung hancur permanen setelah dibaca satu kali.
           </p>
@@ -68,7 +94,7 @@ export default function HomePage() {
 
         {!generatedLink ? (
           <form onSubmit={handleCreateSecret} className="space-y-5">
-            <div>
+            <div className="animate-item opacity-0">
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Pesan Rahasia
               </label>
@@ -82,7 +108,7 @@ export default function HomePage() {
               />
             </div>
 
-            <div>
+            <div className="animate-item opacity-0">
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Hangus Otomatis Jika Tidak Dibuka Dalam:
               </label>
@@ -107,13 +133,13 @@ export default function HomePage() {
             <button
               type="submit"
               disabled={loading || !secretText.trim()}
-              className="w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 font-semibold text-white transition cursor-pointer"
+              className="animate-item opacity-0 w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 font-semibold text-white transition cursor-pointer"
             >
               {loading ? "Mengenkripsi & Membuat Tautan..." : "Buat Tautan Sekali Baca"}
             </button>
           </form>
         ) : (
-          <div className="space-y-5">
+          <div ref={resultRef} className="space-y-5 opacity-0">
             <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/60">
               <p className="text-sm font-medium text-emerald-400 mb-2">
                 Tautan rahasia siap dibagikan!

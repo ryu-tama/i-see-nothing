@@ -1,23 +1,77 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { animate } from "animejs";
 import { decryptSecret } from "@/src/lib/crypto";
 
 function SecretReaderContent() {
   const params = useParams<{ id: string }>();
   const [decryptedMessage, setDecryptedMessage] = useState("");
+  const [displayedText, setDisplayedText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (cardRef.current) {
+      animate(cardRef.current, {
+        translateY: [24, 0],
+        opacity: [0, 1],
+        duration: 650,
+        ease: "outExpo",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!decryptedMessage) return;
+
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    const progress = { value: 0 };
+
+    animate(progress, {
+      value: decryptedMessage.length,
+      duration: Math.min(1200, Math.max(500, decryptedMessage.length * 25)),
+      ease: "outQuad",
+      onUpdate: () => {
+        const revealedCount = Math.floor(progress.value);
+        let scrambled = "";
+        for (let i = 0; i < decryptedMessage.length; i++) {
+          const originalChar = decryptedMessage[i];
+          if (i < revealedCount || originalChar === "\n" || originalChar === " ") {
+            scrambled += originalChar;
+          } else {
+            scrambled += chars[Math.floor(Math.random() * chars.length)];
+          }
+        }
+        setDisplayedText(scrambled);
+      },
+      onComplete: () => {
+        setDisplayedText(decryptedMessage);
+      },
+    });
+  }, [decryptedMessage]);
+
+  useEffect(() => {
+    if (error && errorRef.current) {
+      animate(errorRef.current, {
+        translateX: [-8, 8, -6, 6, -3, 3, 0],
+        duration: 450,
+        ease: "inOutSine",
+      });
+    }
+  }, [error]);
 
   async function handleRevealSecret() {
     setLoading(true);
     setError("");
 
     try {
-      // 1. Ambil kunci dekripsi dari URL fragment (#...) di browser
       const keyString = window.location.hash.replace(/^#/, "");
       if (!keyString) {
         throw new Error(
@@ -25,7 +79,6 @@ function SecretReaderContent() {
         );
       }
 
-      // 2. Minta ciphertext dari server (Server akan langsung menghapusnya setelah request ini!)
       const res = await fetch(`/api/secrets/${params.id}`, {
         method: "POST",
       });
@@ -37,11 +90,9 @@ function SecretReaderContent() {
         );
       }
 
-      // 3. Dekripsi pesan di browser penerima menggunakan kunci dari URL
       const plainText = await decryptSecret(data.ciphertext, data.iv, keyString);
       setDecryptedMessage(plainText);
 
-      // Hapus hash kunci dari address bar browser agar tidak tertinggal di history
       window.history.replaceState(null, "", window.location.pathname);
     } catch (err: unknown) {
       setError(
@@ -61,7 +112,10 @@ function SecretReaderContent() {
   }
 
   return (
-    <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+    <div
+      ref={cardRef}
+      className="opacity-0 w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl"
+    >
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Pesan Rahasia</h1>
         <p className="text-slate-400 text-sm mt-1">
@@ -89,7 +143,7 @@ function SecretReaderContent() {
       )}
 
       {error && (
-        <div className="space-y-5">
+        <div ref={errorRef} className="space-y-5">
           <div className="p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-sm">
             {error}
           </div>
@@ -116,8 +170,8 @@ function SecretReaderContent() {
                 {copied ? "Tersalin!" : "Salin Teks"}
               </button>
             </div>
-            <pre className="w-full rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-slate-100 whitespace-pre-wrap wrap-break-words font-mono">
-              {decryptedMessage}
+            <pre className="w-full rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-sky-300 whitespace-pre-wrap wrap-break-words font-mono">
+              {displayedText}
             </pre>
           </div>
 
