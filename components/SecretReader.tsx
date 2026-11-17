@@ -9,7 +9,6 @@ import { decryptSecret, decryptFile } from "@/src/lib/crypto";
 export default function SecretReader() {
   const params = useParams<{ id: string }>();
   const [decryptedMessage, setDecryptedMessage] = useState("");
-  const [displayedText, setDisplayedText] = useState("");
   const [decryptedFile, setDecryptedFile] = useState<{
     blob: Blob;
     fileName: string;
@@ -21,68 +20,28 @@ export default function SecretReader() {
   const [copied, setCopied] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const errorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (cardRef.current) {
       animate(cardRef.current, {
-        translateY: [24, 0],
+        translateY: [15, 0],
         opacity: [0, 1],
-        duration: 650,
-        ease: "outExpo",
+        duration: 600,
+        ease: "outQuad",
       });
     }
   }, []);
 
-  useEffect(() => {
-    if (!decryptedMessage) return;
-
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-    const progressObj = { value: 0 };
-
-    animate(progressObj, {
-      value: decryptedMessage.length,
-      duration: Math.min(1200, Math.max(500, decryptedMessage.length * 25)),
-      ease: "outQuad",
-      onUpdate: () => {
-        const revealedCount = Math.floor(progressObj.value);
-        let scrambled = "";
-        for (let i = 0; i < decryptedMessage.length; i++) {
-          const originalChar = decryptedMessage[i];
-          if (i < revealedCount || originalChar === "\n" || originalChar === " ") {
-            scrambled += originalChar;
-          } else {
-            scrambled += chars[Math.floor(Math.random() * chars.length)];
-          }
-        }
-        setDisplayedText(scrambled);
-      },
-      onComplete: () => {
-        setDisplayedText(decryptedMessage);
-      },
-    });
-  }, [decryptedMessage]);
-
-  useEffect(() => {
-    if (error && errorRef.current) {
-      animate(errorRef.current, {
-        translateX: [-8, 8, -6, 6, -3, 3, 0],
-        duration: 450,
-        ease: "inOutSine",
-      });
-    }
-  }, [error]);
-
   async function handleRevealSecret() {
     setLoading(true);
     setError("");
-    setProgress("Membuka kunci...");
+    setProgress("Otentikasi");
 
     try {
       const keyString = window.location.hash.replace(/^#/, "");
       if (!keyString) {
         throw new Error(
-          "Kunci dekripsi tidak ditemukan di URL. Pastikan tautan disalin secara utuh."
+          "Kunci dekripsi tidak ditemukan di URL. Pastikan tautan lengkap."
         );
       }
 
@@ -93,7 +52,7 @@ export default function SecretReader() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(
-          data.error || "Pesan tidak ditemukan atau sudah pernah dibuka."
+          data.error || "Pesan tidak ditemukan atau sudah dibaca."
         );
       }
 
@@ -103,15 +62,15 @@ export default function SecretReader() {
         const iv = res.headers.get("X-Secret-IV");
         if (!iv) throw new Error("Metadata enkripsi tidak lengkap.");
 
-        setProgress("Mengunduh data terenkripsi...");
+        setProgress("Mengunduh");
         const buffer = await res.arrayBuffer();
 
-        setProgress("Mendekripsi file...");
+        setProgress("Mendekripsi");
         const result = await decryptFile(buffer, iv, keyString);
         setDecryptedFile(result);
       } else {
         const data = await res.json();
-        setProgress("Mendekripsi teks...");
+        setProgress("Mendekripsi");
         const plainText = await decryptSecret(data.ciphertext, data.iv, keyString);
         setDecryptedMessage(plainText);
       }
@@ -121,7 +80,7 @@ export default function SecretReader() {
       setError(
         err instanceof Error
           ? err.message
-          : "Gagal membuka pesan. Kunci salah atau data telah rusak."
+          : "Gagal membuka pesan rahasia."
       );
     } finally {
       setLoading(false);
@@ -147,148 +106,131 @@ export default function SecretReader() {
     setTimeout(() => setCopied(false), 2500);
   }
 
+  const primaryBtn = "bg-[#252420] text-white hover:bg-[#403e38] transition-colors font-medium px-8 py-4 rounded-none border border-[#252420] disabled:bg-[#d9d6cd] disabled:border-[#d9d6cd] disabled:text-[#88857b]";
+  const secondaryBtn = "bg-transparent text-[#252420] border border-[#252420] hover:bg-[#eae7df] transition-colors font-medium px-6 py-3 rounded-none inline-block text-center";
+
   return (
-    <div
-      ref={cardRef}
-      className="opacity-0 w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl overflow-hidden"
-    >
-      <div className="mb-6">
-        <h1 className="text-3xl font-black text-white tracking-tight">
-          Pesan Rahasia
-        </h1>
-        <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-          Pesan ini dilindungi enkripsi ujung-ke-ujung dan hanya dapat dilihat
-          satu kali.
-        </p>
-      </div>
+    <div ref={cardRef} className="w-full max-w-2xl bg-[#f6f5f0] text-[#252420] font-sans opacity-0">
+      <header className="border-b border-[#252420] pb-6 mb-12 flex items-baseline justify-between">
+        <div>
+          <Link href="/" className="text-4xl font-serif italic tracking-tight hover:text-[#a4492c] transition-colors">BurnNote.</Link>
+          <p className="text-sm font-medium mt-1 text-[#6f6b62]">Dekripsi Pesan Rahasia</p>
+        </div>
+        <div className="flex gap-4 items-center">
+          <a
+            href="https://github.com/ryu-tama/burn-note"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#252420] hover:text-[#a4492c] transition-colors"
+            aria-label="GitHub Repository"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+            </svg>
+          </a>
+          <a
+            href="https://www.instagram.com/2izky"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#252420] hover:text-[#a4492c] transition-colors"
+            aria-label="Instagram Profile"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+            </svg>
+          </a>
+        </div>
+      </header>
 
       {!decryptedMessage && !decryptedFile && !error && (
-        <div className="space-y-6">
-          <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/30 text-amber-200/80 text-sm leading-relaxed">
-            <strong className="text-amber-400 block mb-1">Peringatan:</strong>
-            Begitu anda menekan tombol di bawah, pesan akan langsung didekripsi di
-            browser anda dan dihancur permanen dari server.
+        <div className="space-y-12">
+          <div className="bg-[#fffefa] border border-[#252420] p-8 shadow-[6px_6px_0px_0px_#252420]">
+            <h2 className="text-3xl font-serif mb-4">Ada rahasia untuk Anda.</h2>
+            <p className="text-lg leading-relaxed mb-8">
+              Pesan ini hanya bisa dilihat <span className="font-bold border-b-2 border-[#d4e4bc]">satu kali</span>. Setelah dibuka, data akan dihapus permanen dari server kami segera.
+            </p>
+            <button
+              onClick={handleRevealSecret}
+              disabled={loading}
+              className={primaryBtn}
+            >
+              {loading ? `${progress || "Mendekripsi"}...` : "Buka Pesan Sekarang →"}
+            </button>
           </div>
-
-          <button
-            onClick={handleRevealSecret}
-            disabled={loading}
-            className="w-full py-4 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 font-bold text-white transition-all shadow-lg shadow-sky-900/20 active:scale-95 cursor-pointer"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <svg
-                  className="animate-spin -ml-1 mr-3 h-4 w-4 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                {progress || "Mendekripsi..."}
-              </span>
-            ) : (
-              "Buka & Hancurkan Pesan"
-            )}
-          </button>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#aaa598]">
+            Proses ini dilakukan sepenuhnya di browser Anda.
+          </p>
         </div>
       )}
 
       {error && (
-        <div ref={errorRef} className="space-y-6">
-          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/50 text-red-400 text-sm leading-relaxed">
-            {error}
+        <div className="space-y-12">
+          <div className="bg-[#fbefea] border border-[#e8c9bd] p-8 shadow-[6px_6px_0px_0px_#963d27]">
+            <h2 className="text-2xl font-serif mb-2 text-[#963d27]">Tautan Tidak Valid.</h2>
+            <p className="text-sm text-[#963d27] mb-8">
+              {error} Pesan mungkin sudah dibaca atau masa berlakunya telah habis.
+            </p>
+            <Link href="/" className={secondaryBtn}>← Kembali ke Beranda</Link>
           </div>
-          <Link
-            href="/"
-            className="block text-center w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold text-slate-200 transition-colors"
-          >
-            Kembali ke Beranda
-          </Link>
         </div>
       )}
 
       {decryptedMessage && (
-        <div className="space-y-6">
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-950/40 px-2 py-1 rounded-md border border-emerald-800/50">
-                Dekripsi Berhasil
-              </span>
-              <button
-                onClick={handleCopy}
-                className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 font-bold transition-colors cursor-pointer"
-              >
-                {copied ? "Tersalin!" : "Salin Teks"}
-              </button>
-            </div>
-            <div className="relative">
-              <pre className="w-full rounded-xl bg-slate-950 border border-slate-800 p-5 text-sm text-sky-400 whitespace-pre-wrap break-all font-mono leading-relaxed max-h-96 overflow-y-auto">
-                {displayedText}
-              </pre>
-            </div>
+        <div className="space-y-12">
+          <div className="bg-[#d4e4bc] border border-[#252420] p-4 flex justify-between items-center mb-[-48px] relative z-10 mx-6 shadow-[2px_2px_0px_0px_#252420]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#454d37]">Dekripsi Berhasil</span>
+            <button
+              onClick={handleCopy}
+              className="text-[10px] font-bold uppercase tracking-widest hover:text-[#a4492c] transition-colors"
+            >
+              {copied ? "Tersalin" : "Salin Teks"}
+            </button>
+          </div>
+          
+          <div className="bg-[#fffefa] border border-[#252420] p-10 pt-16 shadow-[6px_6px_0px_0px_#252420]">
+            <pre className="text-lg leading-relaxed font-mono whitespace-pre-wrap break-all select-all">
+              {decryptedMessage}
+            </pre>
           </div>
 
-          <Link
-            href="/"
-            className="block text-center w-full py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold text-slate-200 transition-colors"
-          >
-            Buat Pesan Baru
-          </Link>
+          <div className="flex gap-4">
+             <Link href="/" className={secondaryBtn}>← Buat Baru</Link>
+          </div>
         </div>
       )}
 
       {decryptedFile && (
-        <div className="space-y-6">
-          <div className="p-6 rounded-xl bg-emerald-500/5 border border-emerald-500/30 text-center">
-            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
-              <svg
-                className="w-8 h-8 text-emerald-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
+        <div className="space-y-12">
+          <div className="bg-[#e9d6c9] border border-[#252420] p-12 text-center shadow-[6px_6px_0px_0px_#252420]">
+            <div className="mb-6 inline-block p-4 bg-[#fffefa] border border-[#252420]">
+              <svg className="w-12 h-12 text-[#252420]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
-            <h3 className="text-white font-bold text-lg mb-1 break-all px-4">
-              {decryptedFile.fileName}
-            </h3>
-            <p className="text-slate-400 text-xs mb-6">
-              File siap diunduh. Data di server telah musnah.
-            </p>
+            <h2 className="text-2xl font-serif mb-2 break-all">{decryptedFile.fileName}</h2>
+            <p className="text-sm font-medium text-[#6f6b62] mb-10">File telah didekripsi dan siap untuk diunduh.</p>
             <button
               onClick={handleDownloadFile}
-              className="w-full py-4 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-all shadow-lg shadow-emerald-900/20 active:scale-95 cursor-pointer"
+              className={primaryBtn}
             >
-              Unduh File
+              Unduh File Rahasia ↓
             </button>
           </div>
-
-          <Link
-            href="/"
-            className="block text-center w-full py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold text-slate-200 transition-colors"
-          >
-            Buat Pesan Baru
-          </Link>
+          <Link href="/" className={secondaryBtn}>← Buat Pesan Baru</Link>
         </div>
       )}
+
+      <footer className="mt-24 border-t border-[#d9d6cd] pt-8 flex flex-col sm:flex-row justify-between items-start gap-4">
+        <p className="text-[10px] leading-relaxed text-[#aaa598] font-medium max-w-xs">
+          Pesan ini telah dihapus dari server kami secara permanen. Tutup halaman ini setelah selesai.
+        </p>
+        <div className="flex gap-4">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#252420]">Verified</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#252420]">E2EE</span>
+        </div>
+      </footer>
     </div>
   );
 }
