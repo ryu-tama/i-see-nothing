@@ -23,7 +23,7 @@ Aplikasi berbagi pesan teks dan file rahasia berbasis **Zero-Knowledge**, **End-
 
 ### 1. Clone Repositori & Instal Dependensi
 ```bash
-git clone [https://github.com/](https://github.com/)<username-github-kamu>/burn-note.git
+git clone [https://github.com/ryu-tama/burn-note.git](https://github.com/ryu-tama/burn-note.git)
 cd burn-note
 npm install
 ```
