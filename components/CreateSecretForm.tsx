@@ -46,7 +46,7 @@ export default function CreateSecretForm() {
 
     setLoading(true);
     setError("");
-    setProgress("Enkripsi...");
+    setProgress("Encrypting...");
 
     try {
       let id = "";
@@ -180,7 +180,7 @@ export default function CreateSecretForm() {
                   activeTab === "file" ? "border-[#a4492c] text-[#a4492c]" : "border-transparent text-[#aaa598]"
                 }`}
               >
-                Unggah File
+                Upload File
               </button>
             </div>
 
@@ -205,7 +205,7 @@ export default function CreateSecretForm() {
                     {selectedFile ? selectedFile.name : "Pilih file rahasia"}
                   </p>
                   <p className="text-xs font-bold uppercase tracking-widest text-[#6f6b62]">
-                    Maks 50 MB / Terenkripsi
+                    Maximum size of 50 MB / Encrypted
                   </p>
                 </div>
               </div>
@@ -259,7 +259,7 @@ export default function CreateSecretForm() {
             <p className="text-sm mb-8 text-[#454d37]">
               Pesan akan dihapus permanen setelah dibaca satu kali. Jangan buka tautan ini sendiri.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
@@ -288,7 +288,7 @@ export default function CreateSecretForm() {
       <footer className="animate-item opacity-0 mt-24 border-t border-[#d9d6cd] pt-8 flex flex-col sm:flex-row justify-between items-start gap-4">
         <div className="max-w-xs">
           <p className="text-[10px] leading-relaxed text-[#aaa598] font-medium">
-            Semua data dienkripsi secara lokal di browser Anda. Kami tidak menyimpan kunci atau teks asli di server kami.
+            Semua data dienkripsi secara lokal di browser Anda.
           </p>
         </div>
         <div className="flex gap-4">
