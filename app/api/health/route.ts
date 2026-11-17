@@ -4,6 +4,10 @@ import { supabaseAdmin } from "@/src/lib/supabaseAdmin";
 
 export async function GET() {
   try {
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7be01b1 (style: minor UI spacing and visual adjustments)
     const { error } = await supabaseAdmin
       .from("secrets")
       .select("id")
