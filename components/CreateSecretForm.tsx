@@ -1,232 +1,336 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { encryptSecret } from "@/src/lib/crypto";
+import { animate, stagger } from "animejs";
+import { encryptSecret, encryptFile } from "@/src/lib/crypto";
+
+type Tab = "text" | "file";
 
 export default function CreateSecretForm() {
+  const [activeTab, setActiveTab] = useState<Tab>("text");
   const [secretText, setSecretText] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [ttlSeconds, setTtlSeconds] = useState(3600);
   const [generatedLink, setGeneratedLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    return () => {
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    };
-  }, []);
-
+    if (!generatedLink && containerRef.current) {
+      animate(containerRef.current.querySelectorAll(".animate-item"), {
+        translateY: [20, 0],
+        opacity: [0, 1],
+        duration: 700,
+        delay: stagger(90),
+        ease: "outExpo",
+      });
+    } else if (generatedLink && resultRef.current) {
+      animate(resultRef.current, {
+        scale: [0.95, 1],
+        opacity: [0, 1],
+        duration: 500,
+        ease: "outBack",
+      });
+    }
+  }, [generatedLink]);
+    
   async function handleCreateSecret(e: React.FormEvent) {
     e.preventDefault();
-    if (!secretText.trim() || loading) return;
+    if (activeTab === "text" && !secretText.trim()) return;
+    if (activeTab === "file" && !selectedFile) return;
 
     setLoading(true);
     setError("");
+    setProgress("Mengenkripsi...");
 
     try {
-      const { ciphertext, iv, keyString } = await encryptSecret(secretText);
+      let id = "";
+      let keyString = "";
 
-      const res = await fetch("/api/secrets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ciphertext, iv, ttlSeconds }),
-      });
+      if (activeTab === "text") {
+        const encrypted = await encryptSecret(secretText);
+        keyString = encrypted.keyString;
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal membuat tautan rahasia.");
+        const res = await fetch("/api/secrets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "text",
+            ciphertext: encrypted.ciphertext,
+            iv: encrypted.iv,
+            ttlSeconds,
+          }),
+        });
 
-      const fullUrl = `${window.location.origin}/secret/${data.id}#${keyString}`;
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Gagal membuat tautan.");
+        id = data.id;
+      } else {
+        // activeTab === "file"
+        if (selectedFile!.size > 50 * 1024 * 1024) {
+          throw new Error("File maksimal 50 MB.");
+        }
+
+        const encrypted = await encryptFile(selectedFile!);
+        keyString = encrypted.keyString;
+
+        setProgress("Menyiapkan upload...");
+        const res = await fetch("/api/secrets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "file",
+            iv: encrypted.iv,
+            fileSize: selectedFile!.size,
+            ttlSeconds,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Gagal menyiapkan upload.");
+
+        setProgress("Mengunggah file (E2EE)...");
+        const uploadRes = await fetch(data.signedUrl, {
+          method: "PUT",
+          body: encrypted.encryptedBlob,
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+
+        if (!uploadRes.ok) throw new Error("Gagal mengunggah file.");
+        id = data.id;
+      }
+
+      const fullUrl = `${window.location.origin}/secret/${id}#${keyString}`;
       setGeneratedLink(fullUrl);
       setSecretText("");
+      setSelectedFile(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
     } finally {
       setLoading(false);
+      setProgress("");
     }
   }
 
   async function handleCopy() {
-    setError("");
-
-    try {
-      await navigator.clipboard.writeText(generatedLink);
-      setCopied(true);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2500);
-    } catch {
-      setError("Tautan belum tersalin. Pilih dan salin tautan secara manual.");
-    }
+    await navigator.clipboard.writeText(generatedLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   }
 
-  function handleReset() {
-    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    setGeneratedLink("");
-    setCopied(false);
-    setError("");
-  }
-
-  const buttonClassName =
-    "inline-flex min-h-12 items-center justify-center gap-3 rounded-lg bg-[#252420] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#403e38] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c] disabled:cursor-not-allowed disabled:bg-[#e5e3dc] disabled:text-[#88857b] motion-reduce:transition-none";
+  const tabClass = (tab: Tab) =>
+    `flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
+      activeTab === tab
+        ? "bg-sky-600 text-white shadow-lg"
+        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+    }`;
 
   return (
-    <div className="w-full max-w-lg [color-scheme:light]">
-      <header className="mb-12 flex items-center gap-2.5 sm:mb-16">
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          fill="none"
-          className="size-6 text-[#a4492c]"
-        >
-          <path
-            d="M13 3c1 5-4 6-4 10a3 3 0 0 0 6 0c0-1-.3-2-1-3 3 2 5 5 4 8a6.5 6.5 0 0 1-12-1C4 11 10 9 13 3Z"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span className="text-lg font-semibold tracking-[-0.04em]">BurnNote</span>
-      </header>
-
-      <section aria-labelledby="form-heading">
-        <div className="mb-8">
-          <p className="mb-3 text-xs font-medium tracking-[0.12em] text-[#a4492c] uppercase">
-            {generatedLink ? "Siap dibagikan" : "Pesan pribadi. Sekali baca."}
-          </p>
-          <h1
-            id="form-heading"
-            className="text-4xl leading-[1.15] font-medium tracking-[-0.045em] sm:text-5xl"
-          >
-            {generatedLink ? "Rahasiamu siap dikirim." : "Kirim sekali. Lalu hilang."}
-          </h1>
-          <p className="mt-4 max-w-md text-sm leading-6 text-[#6f6b62]">
-            {generatedLink
-              ? "Bagikan tautan ini ke penerima. Pesan akan dihapus setelah dibaca satu kali."
-              : "Untuk password, API key, atau hal yang cukup diketahui berdua. Dienkripsi di browser, dihapus setelah dibaca."}
-          </p>
+    <div
+      ref={containerRef}
+      className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+    >
+      <div className="mb-6">
+        <div className="animate-item opacity-0 inline-flex items-center px-3 py-1 text-[10px] font-bold tracking-widest text-sky-400 uppercase bg-sky-950/40 border border-sky-800/50 rounded-full mb-4">
+          <span className="relative flex h-2 w-2 mr-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+          </span>
+          Zero-Knowledge • E2EE
         </div>
+        <h1 className="animate-item opacity-0 text-3xl font-black text-white tracking-tight">
+          BurnNote
+        </h1>
+        <p className="animate-item opacity-0 text-slate-400 text-sm mt-2 leading-relaxed">
+          Kirim data sensitif secara aman. Pesan dienkripsi di browser dan
+          langsung hancur setelah dibaca.
+        </p>
+      </div>
 
-        {!generatedLink ? (
-          <form onSubmit={handleCreateSecret} aria-busy={loading}>
-            <div className="overflow-hidden rounded-xl border border-[#d9d6cd] bg-[#fffefa] focus-within:border-[#8b8577] focus-within:ring-2 focus-within:ring-[#8b8577]/15">
-              <label
-                htmlFor="secret-text"
-                className="block px-5 pt-4 text-xs font-medium text-[#6f6b62]"
-              >
-                Pesan rahasia
-              </label>
-              <textarea
-                id="secret-text"
-                rows={7}
-                required
-                disabled={loading}
-                value={secretText}
-                onChange={(e) => setSecretText(e.target.value)}
-                placeholder="Tulis yang ingin kamu bagikan…"
-                spellCheck={false}
-                autoComplete="off"
-                className="block min-h-48 w-full resize-y bg-transparent px-5 pt-3 pb-5 text-base leading-7 text-[#252420] placeholder:text-[#aaa598] focus:outline-none disabled:opacity-60"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eae7df] px-5 py-3">
-                <label htmlFor="secret-ttl" className="text-xs text-[#6f6b62]">
-                  Jika belum dibaca, hapus dalam
-                </label>
-                <select
-                  id="secret-ttl"
-                  value={ttlSeconds}
-                  disabled={loading}
-                  onChange={(e) => setTtlSeconds(Number(e.target.value))}
-                  className="min-h-8 cursor-pointer rounded bg-transparent py-1 pr-1 pl-2 text-sm font-medium text-[#454239] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a4492c] disabled:cursor-wait"
-                >
-                  <option value={300}>5 menit</option>
-                  <option value={3600}>1 jam</option>
-                  <option value={86400}>24 jam</option>
-                  <option value={604800}>7 hari</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !secretText.trim()}
-              className={`${buttonClassName} mt-5 w-full`}
-            >
-              {loading ? "Mengenkripsi pesan…" : "Buat tautan rahasia"}
-              {!loading && <span aria-hidden="true">→</span>}
-            </button>
-            <p className="mt-3 text-center text-xs leading-5 text-[#817c70]">
-              Tanpa akun. Hanya penerima tautan yang bisa membaca.
-            </p>
-          </form>
-        ) : (
-          <div>
-            <div className="rounded-xl border border-[#d9d6cd] bg-[#fffefa] p-5">
-              <label
-                htmlFor="generated-link"
-                className="mb-3 block text-xs font-medium text-[#6f6b62]"
-              >
-                Tautan sekali baca
-              </label>
-              <input
-                id="generated-link"
-                type="text"
-                readOnly
-                autoFocus
-                value={generatedLink}
-                onFocus={(e) => e.currentTarget.select()}
-                className="min-h-11 w-full min-w-0 rounded-md border border-[#e5e2d9] bg-[#f8f7f2] px-3 py-2 font-mono text-sm text-[#454239] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a4492c]"
-              />
-              <button
-                type="button"
-                onClick={handleCopy}
-                className={`${buttonClassName} mt-3 w-full`}
-              >
-                <span role="status" aria-live="polite">
-                  {copied ? "Tautan tersalin" : "Salin tautan"}
-                </span>
-                <span aria-hidden="true">{copied ? "✓" : "↗"}</span>
-              </button>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-[#6f6b62]">
-              <span className="font-medium text-[#454239]">Jangan dibuka dulu.</span>{" "}
-              Tautan hanya bisa dibuka sekali, termasuk olehmu sendiri.
-            </p>
+      {!generatedLink ? (
+        <form onSubmit={handleCreateSecret} className="space-y-6">
+          <div className="animate-item opacity-0 flex p-1 bg-slate-950 border border-slate-800 rounded-xl">
             <button
               type="button"
-              onClick={handleReset}
-              className="mt-6 rounded py-1 text-sm font-medium text-[#454239] underline decoration-[#c9c4b7] underline-offset-4 transition-colors hover:text-[#a4492c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c] motion-reduce:transition-none"
+              onClick={() => setActiveTab("text")}
+              className={tabClass("text")}
             >
-              Tulis pesan baru
+              Pesan Teks
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("file")}
+              className={tabClass("file")}
+            >
+              Unggah File
             </button>
           </div>
-        )}
 
-        {error && (
-          <p
-            role="alert"
-            className="mt-4 rounded-lg border border-[#e8c9bd] bg-[#fbefea] px-4 py-3 text-sm leading-6 text-[#963d27]"
+          <div className="animate-item opacity-0">
+            {activeTab === "text" ? (
+              <textarea
+                rows={6}
+                required
+                value={secretText}
+                onChange={(e) => setSecretText(e.target.value)}
+                placeholder="Masukkan password, token, atau rahasia lainnya..."
+                className="w-full rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors resize-none"
+              />
+            ) : (
+              <div
+                className={`relative group flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed transition-all ${
+                  selectedFile
+                    ? "border-sky-500 bg-sky-500/5"
+                    : "border-slate-800 bg-slate-950 hover:border-slate-700"
+                }`}
+              >
+                <input
+                  type="file"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="text-center">
+                  <div className="mb-2 text-slate-300">
+                    {selectedFile ? (
+                      <span className="font-semibold text-sky-400">
+                        {selectedFile.name}
+                      </span>
+                    ) : (
+                      "Klik atau drop file di sini"
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Maksimal 50 MB • Terenkripsi E2EE
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="animate-item opacity-0">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+              Hancurkan otomatis dalam:
+            </label>
+            <div className="relative group">
+              <select
+                value={ttlSeconds}
+                onChange={(e) => setTtlSeconds(Number(e.target.value))}
+                className="w-full rounded-xl bg-slate-950 border border-slate-800 p-3 pr-10 text-sm text-slate-100 focus:outline-none focus:border-sky-500 transition-colors appearance-none cursor-pointer"
+              >
+                <option value={300}>5 Menit</option>
+                <option value={3600}>1 Jam</option>
+                <option value={86400}>24 Jam</option>
+                <option value={604800}>7 Hari</option>
+              </select>
+              <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-slate-500 group-focus-within:text-sky-500 transition-colors">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/50 text-red-400 text-xs leading-relaxed animate-shake">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="animate-item opacity-0 w-full py-3.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 font-bold text-white transition-all shadow-lg shadow-sky-900/20 active:scale-95 cursor-pointer"
           >
-            {error}
-          </p>
-        )}
-      </section>
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-4 w-4 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                {progress || "Memproses..."}
+              </span>
+            ) : (
+              "Buat Tautan Sekali Baca"
+            )}
+          </button>
+        </form>
+      ) : (
+        <div ref={resultRef} className="space-y-6 opacity-0">
+          <div className="p-5 rounded-xl bg-emerald-500/5 border border-emerald-500/30">
+            <p className="text-sm font-bold text-emerald-400 mb-2 flex items-center">
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              Tautan siap dibagikan!
+            </p>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Tautan ini hanya bisa dibuka <strong>1 kali</strong>. Jangan dibuka
+              sendiri jika ingin dikirim ke orang lain.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={generatedLink}
+                className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2.5 text-xs text-sky-400 font-mono focus:outline-none"
+              />
+              <button
+                onClick={handleCopy}
+                className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-xs font-bold text-white shrink-0 transition-colors cursor-pointer"
+              >
+                {copied ? "Tersalin!" : "Salin"}
+              </button>
+            </div>
+          </div>
 
-      <footer className="mt-10 flex items-start gap-2 border-t border-[#dfdcd3] pt-5 text-xs leading-5 text-[#817c70] sm:mt-12">
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          className="mt-0.5 size-4 shrink-0"
-        >
-          <rect x="3.5" y="7" width="9" height="7" rx="1.5" />
-          <path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7" />
-        </svg>
-        <p>Enkripsi end-to-end. Kami tidak bisa membaca isi pesanmu.</p>
-      </footer>
+          <button
+            onClick={() => setGeneratedLink("")}
+            className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-slate-200 transition-colors cursor-pointer"
+          >
+            Buat Baru
+          </button>
+        </div>
+      )}
     </div>
   );
 }

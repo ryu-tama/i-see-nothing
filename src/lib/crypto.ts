@@ -1,18 +1,15 @@
-// Mengubah ArrayBuffer menjadi teks Base64URL agar aman ditaruh di link/URL
-function bufferToBase64Url(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+// Utilitas konversi Base64URL untuk URL fragment (#key) & IV
+function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// Mengubah teks Base64URL kembali menjadi ArrayBuffer untuk proses dekripsi
-function base64UrlToBuffer(base64Url: string): ArrayBuffer {
+function base64UrlToBuffer(base64Url: string): Uint8Array {
   const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
   const binary = atob(padded);
@@ -20,64 +17,122 @@ function base64UrlToBuffer(base64Url: string): ArrayBuffer {
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return bytes.buffer;
+  return bytes;
 }
 
-// 1. Fungsi Enkripsi Pesan di Browser Pengirim
-export async function encryptSecret(plainText: string) {
-  // Buat kunci acak AES-GCM 256-bit
-  const key = await window.crypto.subtle.generateKey(
+async function generateAesKey(): Promise<{ key: CryptoKey; keyString: string }> {
+  const key = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     true,
     ["encrypt", "decrypt"]
   );
-
-  // Buat IV (Initialization Vector) acak 12-byte agar hasil enkripsi selalu unik
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const encodedText = new TextEncoder().encode(plainText);
-
-  // Proses enkripsi
-  const cipherBuffer = await window.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    encodedText
-  );
-
-  // Ekspor kunci menjadi string pendek untuk ditempel di URL (#key)
-  const rawKey = await window.crypto.subtle.exportKey("raw", key);
-
-  return {
-    ciphertext: bufferToBase64Url(cipherBuffer),
-    iv: bufferToBase64Url(iv.buffer),
-    keyString: bufferToBase64Url(rawKey), // Ini TIDAK PERNAH dikirim ke server
-  };
+  const rawKey = await crypto.subtle.exportKey("raw", key);
+  return { key, keyString: bufferToBase64Url(rawKey) };
 }
 
-// 2. Fungsi Dekripsi Pesan di Browser Penerima
-export async function decryptSecret(
-  ciphertextBase64: string,
-  ivBase64: string,
-  keyString: string
-): Promise<string> {
+async function importAesKey(keyString: string): Promise<CryptoKey> {
   const rawKey = base64UrlToBuffer(keyString);
-  const iv = new Uint8Array(base64UrlToBuffer(ivBase64));
-  const cipherBuffer = base64UrlToBuffer(ciphertextBase64);
-
-  // Impor kembali kunci dari URL fragment
-  const key = await window.crypto.subtle.importKey(
+  return crypto.subtle.importKey(
     "raw",
-    rawKey,
-    { name: "AES-GCM" },
+    rawKey.buffer as ArrayBuffer,
+    { name: "AES-GCM", length: 256 },
     false,
     ["decrypt"]
   );
+}
 
-  // Proses dekripsi
-  const decryptedBuffer = await window.crypto.subtle.decrypt(
+// 1. Enkripsi & Dekripsi Pesan Teks
+export async function encryptSecret(plainText: string) {
+  const { key, keyString } = await generateAesKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(plainText);
+
+  const ciphertextBuffer = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
-    cipherBuffer
+    encoded
+  );
+
+  return {
+    ciphertext: bufferToBase64Url(ciphertextBuffer),
+    iv: bufferToBase64Url(iv),
+    keyString,
+  };
+}
+
+export async function decryptSecret(
+  ciphertextB64: string,
+  ivB64: string,
+  keyString: string
+): Promise<string> {
+  const key = await importAesKey(keyString);
+  const iv = base64UrlToBuffer(ivB64);
+  const ciphertext = base64UrlToBuffer(ciphertextB64);
+
+  const decryptedBuffer = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    key,
+    ciphertext.buffer as ArrayBuffer
   );
 
   return new TextDecoder().decode(decryptedBuffer);
+}
+
+// 2. Enkripsi & Dekripsi File (Menyembunyikan nama file & MIME type di dalam ciphertext)
+export async function encryptFile(file: File) {
+  const { key, keyString } = await generateAesKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  const metadataBytes = new TextEncoder().encode(
+    JSON.stringify({ name: file.name, type: file.type || "application/octet-stream" })
+  );
+  const fileBuffer = await file.arrayBuffer();
+
+  // Paket biner: [4 byte panjang metadata][Metadata JSON][Isi File]
+  const combined = new Uint8Array(4 + metadataBytes.length + fileBuffer.byteLength);
+  new DataView(combined.buffer).setUint32(0, metadataBytes.length, false);
+  combined.set(metadataBytes, 4);
+  combined.set(new Uint8Array(fileBuffer), 4 + metadataBytes.length);
+
+  const encryptedBuffer = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    combined
+  );
+
+  return {
+    encryptedBlob: new Blob([encryptedBuffer], { type: "application/octet-stream" }),
+    iv: bufferToBase64Url(iv),
+    keyString,
+  };
+}
+
+export async function decryptFile(
+  encryptedBuffer: ArrayBuffer,
+  ivB64: string,
+  keyString: string
+): Promise<{ blob: Blob; fileName: string }> {
+  const key = await importAesKey(keyString);
+  const iv = base64UrlToBuffer(ivB64);
+
+  const decryptedBuffer = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    key,
+    encryptedBuffer
+  );
+
+  const decryptedBytes = new Uint8Array(decryptedBuffer);
+  const metadataLength = new DataView(decryptedBytes.buffer).getUint32(0, false);
+  const metadataBytes = decryptedBytes.slice(4, 4 + metadataLength);
+  const fileBytes = decryptedBytes.slice(4 + metadataLength);
+
+  const metadata = JSON.parse(new TextDecoder().decode(metadataBytes)) as {
+    name: string;
+    type: string;
+  };
+
+  return {
+    blob: new Blob([fileBytes], { type: metadata.type }),
+    fileName: metadata.name,
+  };
 }
