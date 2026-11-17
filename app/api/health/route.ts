@@ -1,9 +1,9 @@
+// Agar Supabase tetap tercatat aktif
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/src/lib/supabaseAdmin";
 
 export async function GET() {
   try {
-    // Query super ringan agar Supabase tetap tercatat aktif
     const { error } = await supabaseAdmin
       .from("secrets")
       .select("id")
