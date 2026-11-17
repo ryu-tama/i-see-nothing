@@ -129,12 +129,12 @@ export default function CreateSecretForm() {
     <div ref={containerRef} className="w-full max-w-2xl bg-[#f6f5f0] text-[#252420] font-sans">
       <header className="animate-item opacity-0 border-b border-[#252420] pb-6 mb-12 flex items-baseline justify-between">
         <div>
-          <h1 className="text-4xl font-serif italic tracking-tight">BurnNote.</h1>
+          <h1 className="text-4xl font-serif italic tracking-tight">I See Nothing.</h1>
           <p className="text-sm font-medium mt-1 text-[#6f6b62]">Zero-Knowledge Secret Sharing</p>
         </div>
         <div className="flex gap-4 items-center">
           <a
-            href="https://github.com/ryu-tama/burn-note"
+            href="https://github.com/ryu-tama/i-see-nothing"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#252420] hover:text-[#a4492c] transition-colors"

@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BurnNote — Zero-Knowledge Secret Sharing",
+  title: "I See Nothing — Zero-Knowledge Self-Destructing Notes & File Sharing",
   description: "Kirim pesan rahasia terenkripsi yang hancur setelah satu kali baca.",
 };
 

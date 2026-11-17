@@ -1,4 +1,4 @@
-# BurnNote 🔥
+# I See Nothing 🛡️
 
 Aplikasi berbagi pesan teks dan file rahasia berbasis **Zero-Knowledge**, **End-to-End Encryption (E2EE)**, dan **Burn-After-Reading**. Seluruh proses enkripsi maupun dekripsi dilakukan sepenuhnya di sisi browser pengguna menggunakan Web Crypto API sehingga server tidak pernah mengetahui isi pesan, nama file asli, maupun kunci dekripsinya.
 
@@ -23,8 +23,8 @@ Aplikasi berbagi pesan teks dan file rahasia berbasis **Zero-Knowledge**, **End-
 
 ### 1. Clone Repositori & Instal Dependensi
 ```bash
-git clone [https://github.com/ryu-tama/burn-note.git](https://github.com/ryu-tama/burn-note.git)
-cd burn-note
+git clone [https://github.com/ryu-tama/i-see-nothing.git](https://github.com/ryu-tama/i-see-nothing.git)
+cd i-see-nothing
 npm install
 ```
 
