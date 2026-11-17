@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/src/lib/supabaseAdmin";
-
+import { unstable_noStore as noStore } from 'next/cache';
 
 export async function GET() {
+  noStore();
   try {
     const { error } = await supabaseAdmin
       .from("secrets")
