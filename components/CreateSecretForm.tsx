@@ -288,7 +288,7 @@ export default function CreateSecretForm() {
       <footer className="animate-item opacity-0 mt-24 border-t border-[#d9d6cd] pt-8 flex flex-col sm:flex-row justify-between items-start gap-4">
         <div className="max-w-xs">
           <p className="text-[10px] leading-relaxed text-[#aaa598] font-medium">
-            Semua data dienkripsi secara lokal di peramban Anda. Kami tidak menyimpan kunci atau teks asli di server kami.
+            Semua data dienkripsi secara lokal di browser Anda. Kami tidak menyimpan kunci atau teks asli di server kami.
           </p>
         </div>
         <div className="flex gap-4">
