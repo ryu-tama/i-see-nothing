@@ -3,73 +3,29 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { animate } from "animejs";
 import { decryptSecret } from "@/src/lib/crypto";
 
 export default function SecretReader() {
   const params = useParams<{ id: string }>();
   const [decryptedMessage, setDecryptedMessage] = useState("");
-  const [displayedText, setDisplayedText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copyError, setCopyError] = useState("");
   const [copied, setCopied] = useState(false);
-
-  const cardRef = useRef<HTMLDivElement>(null);
-  const errorRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (cardRef.current) {
-      animate(cardRef.current, {
-        translateY: [24, 0],
-        opacity: [0, 1],
-        duration: 650,
-        ease: "outExpo",
-      });
-    }
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!decryptedMessage) return;
-
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-    const progress = { value: 0 };
-
-    animate(progress, {
-      value: decryptedMessage.length,
-      duration: Math.min(1200, Math.max(500, decryptedMessage.length * 25)),
-      ease: "outQuad",
-      onUpdate: () => {
-        const revealedCount = Math.floor(progress.value);
-        let scrambled = "";
-        for (let i = 0; i < decryptedMessage.length; i++) {
-          const originalChar = decryptedMessage[i];
-          if (i < revealedCount || originalChar === "\n" || originalChar === " ") {
-            scrambled += originalChar;
-          } else {
-            scrambled += chars[Math.floor(Math.random() * chars.length)];
-          }
-        }
-        setDisplayedText(scrambled);
-      },
-      onComplete: () => {
-        setDisplayedText(decryptedMessage);
-      },
-    });
-  }, [decryptedMessage]);
-
-  useEffect(() => {
-    if (error && errorRef.current) {
-      animate(errorRef.current, {
-        translateX: [-8, 8, -6, 6, -3, 3, 0],
-        duration: 450,
-        ease: "inOutSine",
-      });
-    }
-  }, [error]);
-
   async function handleRevealSecret() {
+    if (loading) return;
+
     setLoading(true);
     setError("");
+    setCopyError("");
 
     try {
       const keyString = window.location.hash.replace(/^#/, "");
@@ -106,83 +62,167 @@ export default function SecretReader() {
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(decryptedMessage);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopyError("");
+
+    try {
+      await navigator.clipboard.writeText(decryptedMessage);
+      setCopied(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopyError("Teks belum tersalin. Pilih dan salin pesan secara manual.");
+    }
   }
 
+  const buttonClassName =
+    "inline-flex min-h-12 items-center justify-center gap-3 rounded-lg bg-[#252420] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#403e38] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c] disabled:cursor-not-allowed disabled:bg-[#e5e3dc] disabled:text-[#88857b] motion-reduce:transition-none cursor-pointer";
+
   return (
-    <div
-      ref={cardRef}
-      className="opacity-0 w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl"
-    >
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Pesan Rahasia</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Pesan ini dilindungi enkripsi ujung-ke-ujung dan hanya dapat dilihat
-          satu kali.
-        </p>
-      </div>
-
-      {!decryptedMessage && !error && (
-        <div className="space-y-5">
-          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/50 text-amber-200 text-sm">
-            <strong>Peringatan:</strong> Begitu kamu menekan tombol di bawah,
-            pesan akan langsung dihapus permanen dari server dan tidak bisa
-            dimuat ulang.
-          </div>
-
-          <button
-            onClick={handleRevealSecret}
-            disabled={loading}
-            className="w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 font-semibold text-white transition cursor-pointer"
+    <div className="w-full max-w-lg [color-scheme:light]">
+      <header className="mb-12 flex items-center gap-2.5 sm:mb-16">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2.5 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c]"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="size-6 text-[#a4492c]"
           >
-            {loading ? "Mendekripsi Pesan..." : "Buka & Hancurkan Pesan"}
-          </button>
-        </div>
-      )}
+            <path
+              d="M13 3c1 5-4 6-4 10a3 3 0 0 0 6 0c0-1-.3-2-1-3 3 2 5 5 4 8a6.5 6.5 0 0 1-12-1C4 11 10 9 13 3Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="text-lg font-semibold tracking-[-0.04em]">BurnNote</span>
+        </Link>
+      </header>
 
-      {error && (
-        <div ref={errorRef} className="space-y-5">
-          <div className="p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-sm">
-            {error}
-          </div>
-          <Link
-            href="/"
-            className="block text-center w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-200 transition"
+      <section aria-labelledby="reader-heading">
+        <div className="mb-8">
+          <p className="mb-3 text-xs font-medium tracking-[0.12em] text-[#a4492c] uppercase">
+            {decryptedMessage
+              ? "Pesan terbuka • Data di server telah dihapus"
+              : error
+                ? "Tidak dapat dibuka"
+                : "Pesan rahasia. Sekali baca."}
+          </p>
+          <h1
+            id="reader-heading"
+            className="text-4xl leading-[1.15] font-medium tracking-[-0.045em] sm:text-5xl"
           >
-            Kembali ke Beranda
-          </Link>
+            {decryptedMessage
+              ? "Isi pesan rahasia."
+              : error
+                ? "Pesan sudah tidak tersedia."
+                : "Ada pesan untukmu."}
+          </h1>
+          <p className="mt-4 max-w-md text-sm leading-6 text-[#6f6b62]">
+            {decryptedMessage
+              ? "Simpan isi pesan bila perlu. Setelah halaman ini ditutup atau dimuat ulang, pesan tidak dapat diakses lagi."
+              : error
+                ? "Tautan ini mungkin sudah pernah dibuka, kedaluwarsa, atau tidak lengkap."
+                : "Pesan ini dilindungi enkripsi end-to-end dan hanya dapat dilihat satu kali."}
+          </p>
         </div>
-      )}
 
-      {decryptedMessage && (
-        <div className="space-y-5">
+        {!decryptedMessage && !error && (
           <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-medium text-emerald-400">
-                Pesan berhasil didekripsi (Data di server sudah musnah)
-              </span>
-              <button
-                onClick={handleCopy}
-                className="text-xs px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-400 transition cursor-pointer"
-              >
-                {copied ? "Tersalin!" : "Salin Teks"}
-              </button>
+            <div className="rounded-xl border border-[#d9d6cd] bg-[#fffefa] p-5">
+              <p className="text-xs font-medium text-[#6f6b62]">Sebelum membuka</p>
+              <p className="mt-2 text-sm leading-6 text-[#454239]">
+                Begitu kamu menekan tombol di bawah, pesan akan langsung didekripsi di
+                perangkatmu dan dihapus permanen dari server.
+              </p>
             </div>
-            <pre className="w-full rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-sky-300 whitespace-pre-wrap wrap-break-words font-mono">
-              {displayedText}
-            </pre>
-          </div>
 
-          <Link
-            href="/"
-            className="block text-center w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-200 transition"
-          >
-            Buat Pesan Rahasia Baru
-          </Link>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={handleRevealSecret}
+              disabled={loading}
+              className={`${buttonClassName} mt-5 w-full`}
+            >
+              {loading ? "Mendekripsi pesan…" : "Buka & hancurkan pesan"}
+              {!loading && <span aria-hidden="true">→</span>}
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div>
+            <div
+              role="alert"
+              className="rounded-xl border border-[#e8c9bd] bg-[#fbefea] px-5 py-4 text-sm leading-6 text-[#963d27]"
+            >
+              {error}
+            </div>
+            <Link href="/" className={`${buttonClassName} mt-5 w-full`}>
+              Kembali ke beranda
+              <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+        )}
+
+        {decryptedMessage && (
+          <div>
+            <div className="overflow-hidden rounded-xl border border-[#d9d6cd] bg-[#fffefa]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#eae7df] px-5 py-3">
+                <span className="text-xs font-medium text-[#6f6b62]">
+                  Pesan berhasil didekripsi
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-[#d9d6cd] bg-[#f8f7f2] px-2.5 py-1 text-xs font-medium text-[#252420] transition-colors hover:bg-[#efede6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a4492c] cursor-pointer"
+                >
+                  <span role="status" aria-live="polite">
+                    {copied ? "Tersalin" : "Salin teks"}
+                  </span>
+                  <span aria-hidden="true">{copied ? "✓" : "↗"}</span>
+                </button>
+              </div>
+              <pre className="max-h-96 w-full max-w-full overflow-x-hidden overflow-y-auto px-5 py-4 font-mono text-sm leading-6 whitespace-pre-wrap break-all text-[#252420] select-all">
+                {decryptedMessage}
+              </pre>
+            </div>
+
+            {copyError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg border border-[#e8c9bd] bg-[#fbefea] px-4 py-3 text-sm leading-6 text-[#963d27]"
+              >
+                {copyError}
+              </p>
+            )}
+
+            <Link
+              href="/"
+              className="mt-6 inline-block rounded py-1 text-sm font-medium text-[#454239] underline decoration-[#c9c4b7] underline-offset-4 transition-colors hover:text-[#a4492c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c] motion-reduce:transition-none"
+            >
+              Buat pesan rahasia baru
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <footer className="mt-10 flex items-start gap-2 border-t border-[#dfdcd3] pt-5 text-xs leading-5 text-[#817c70] sm:mt-12">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          className="mt-0.5 size-4 shrink-0"
+        >
+          <rect x="3.5" y="7" width="9" height="7" rx="1.5" />
+          <path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7" />
+        </svg>
+        <p>Enkripsi end-to-end. Kami tidak bisa membaca isi pesanmu.</p>
+      </footer>
     </div>
   );
 }

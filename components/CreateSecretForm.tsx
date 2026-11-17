@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { animate, stagger } from "animejs";
 import { encryptSecret } from "@/src/lib/crypto";
 
 export default function CreateSecretForm() {
@@ -11,36 +10,17 @@ export default function CreateSecretForm() {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const resultRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (containerRef.current) {
-      animate(containerRef.current.querySelectorAll(".animate-item"), {
-        translateY: [20, 0],
-        opacity: [0, 1],
-        duration: 700,
-        delay: stagger(90),
-        ease: "outExpo",
-      });
-    }
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
   }, []);
-
-  useEffect(() => {
-    if (generatedLink && resultRef.current) {
-      animate(resultRef.current, {
-        scale: [0.95, 1],
-        opacity: [0, 1],
-        duration: 500,
-        ease: "outBack",
-      });
-    }
-  }, [generatedLink]);
 
   async function handleCreateSecret(e: React.FormEvent) {
     e.preventDefault();
-    if (!secretText.trim()) return;
+    if (!secretText.trim() || loading) return;
 
     setLoading(true);
     setError("");
@@ -68,109 +48,185 @@ export default function CreateSecretForm() {
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(generatedLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setError("");
+
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setCopied(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setError("Tautan belum tersalin. Pilih dan salin tautan secara manual.");
+    }
   }
 
+  function handleReset() {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    setGeneratedLink("");
+    setCopied(false);
+    setError("");
+  }
+
+  const buttonClassName =
+    "inline-flex min-h-12 items-center justify-center gap-3 rounded-lg bg-[#252420] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#403e38] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c] disabled:cursor-not-allowed disabled:bg-[#e5e3dc] disabled:text-[#88857b] motion-reduce:transition-none";
+
   return (
-    <div
-      ref={containerRef}
-      className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl"
-    >
-      <div className="mb-6">
-        <div className="animate-item opacity-0 inline-block px-3 py-1 text-xs font-semibold tracking-wider text-sky-400 uppercase bg-sky-950/60 border border-sky-800/50 rounded-full mb-3">
-          Zero-Knowledge • End-to-End Encrypted
-        </div>
-        <h1 className="animate-item opacity-0 text-2xl sm:text-3xl font-bold text-white">
-          BurnNote
-        </h1>
-        <p className="animate-item opacity-0 text-slate-400 text-sm mt-1">
-          Kirim password, API key, atau catatan sensitif. Pesan dienkripsi di
-          browser-mu dan langsung hancur permanen setelah dibaca satu kali.
-        </p>
-      </div>
+    <div className="w-full max-w-lg [color-scheme:light]">
+      <header className="mb-12 flex items-center gap-2.5 sm:mb-16">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          className="size-6 text-[#a4492c]"
+        >
+          <path
+            d="M13 3c1 5-4 6-4 10a3 3 0 0 0 6 0c0-1-.3-2-1-3 3 2 5 5 4 8a6.5 6.5 0 0 1-12-1C4 11 10 9 13 3Z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="text-lg font-semibold tracking-[-0.04em]">BurnNote</span>
+      </header>
 
-      {!generatedLink ? (
-        <form onSubmit={handleCreateSecret} className="space-y-5">
-          <div className="animate-item opacity-0">
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Pesan Rahasia
-            </label>
-            <textarea
-                          rows={5}
-              required
-              value={secretText}
-              onChange={(e) => setSecretText(e.target.value)}
-              placeholder="Masukkan password, token, atau catatan rahasia di sini..."
-              className="w-full rounded-xl bg-slate-950 border border-slate-800 p-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
-            />
-          </div>
-
-          <div className="animate-item opacity-0">
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Hangus Otomatis Jika Tidak Dibuka Dalam:
-            </label>
-            <select
-              value={ttlSeconds}
-              onChange={(e) => setTtlSeconds(Number(e.target.value))}
-              className="w-full rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm text-slate-100 focus:outline-none focus:border-sky-500"
-            >
-              <option value={300}>5 Menit</option>
-              <option value={3600}>1 Jam</option>
-              <option value={86400}>24 Jam</option>
-              <option value={604800}>7 Hari</option>
-            </select>
-          </div>
-
-          {error && (
-            <div className="p-3 rounded-lg bg-red-950/50 border border-red-800 text-red-300 text-sm">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || !secretText.trim()}
-            className="animate-item opacity-0 w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 font-semibold text-white transition cursor-pointer"
+      <section aria-labelledby="form-heading">
+        <div className="mb-8">
+          <p className="mb-3 text-xs font-medium tracking-[0.12em] text-[#a4492c] uppercase">
+            {generatedLink ? "Siap dibagikan" : "Pesan pribadi. Sekali baca."}
+          </p>
+          <h1
+            id="form-heading"
+            className="text-4xl leading-[1.15] font-medium tracking-[-0.045em] sm:text-5xl"
           >
-            {loading ? "Mengenkripsi & Membuat Tautan..." : "Buat Tautan Sekali Baca"}
-          </button>
-        </form>
-      ) : (
-        <div ref={resultRef} className="space-y-5 opacity-0">
-          <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/60">
-            <p className="text-sm font-medium text-emerald-400 mb-2">
-              Tautan rahasia siap dibagikan!
+            {generatedLink ? "Rahasiamu siap dikirim." : "Kirim sekali. Lalu hilang."}
+          </h1>
+          <p className="mt-4 max-w-md text-sm leading-6 text-[#6f6b62]">
+            {generatedLink
+              ? "Bagikan tautan ini ke penerima. Pesan akan dihapus setelah dibaca satu kali."
+              : "Untuk password, API key, atau hal yang cukup diketahui berdua. Dienkripsi di browser, dihapus setelah dibaca."}
+          </p>
+        </div>
+
+        {!generatedLink ? (
+          <form onSubmit={handleCreateSecret} aria-busy={loading}>
+            <div className="overflow-hidden rounded-xl border border-[#d9d6cd] bg-[#fffefa] focus-within:border-[#8b8577] focus-within:ring-2 focus-within:ring-[#8b8577]/15">
+              <label
+                htmlFor="secret-text"
+                className="block px-5 pt-4 text-xs font-medium text-[#6f6b62]"
+              >
+                Pesan rahasia
+              </label>
+              <textarea
+                id="secret-text"
+                rows={7}
+                required
+                disabled={loading}
+                value={secretText}
+                onChange={(e) => setSecretText(e.target.value)}
+                placeholder="Tulis yang ingin kamu bagikan…"
+                spellCheck={false}
+                autoComplete="off"
+                className="block min-h-48 w-full resize-y bg-transparent px-5 pt-3 pb-5 text-base leading-7 text-[#252420] placeholder:text-[#aaa598] focus:outline-none disabled:opacity-60"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eae7df] px-5 py-3">
+                <label htmlFor="secret-ttl" className="text-xs text-[#6f6b62]">
+                  Jika belum dibaca, hapus dalam
+                </label>
+                <select
+                  id="secret-ttl"
+                  value={ttlSeconds}
+                  disabled={loading}
+                  onChange={(e) => setTtlSeconds(Number(e.target.value))}
+                  className="min-h-8 cursor-pointer rounded bg-transparent py-1 pr-1 pl-2 text-sm font-medium text-[#454239] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a4492c] disabled:cursor-wait"
+                >
+                  <option value={300}>5 menit</option>
+                  <option value={3600}>1 jam</option>
+                  <option value={86400}>24 jam</option>
+                  <option value={604800}>7 hari</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !secretText.trim()}
+              className={`${buttonClassName} mt-5 w-full`}
+            >
+              {loading ? "Mengenkripsi pesan…" : "Buat tautan rahasia"}
+              {!loading && <span aria-hidden="true">→</span>}
+            </button>
+            <p className="mt-3 text-center text-xs leading-5 text-[#817c70]">
+              Tanpa akun. Hanya penerima tautan yang bisa membaca.
             </p>
-            <p className="text-xs text-slate-400 mb-3">
-              Catatan: Tautan ini hanya bisa dibuka <strong>1 kali</strong>. Jangan
-              buka tautan ini sendiri jika ingin mengirimkannya ke orang lain.
-            </p>
-            <div className="flex gap-2">
+          </form>
+        ) : (
+          <div>
+            <div className="rounded-xl border border-[#d9d6cd] bg-[#fffefa] p-5">
+              <label
+                htmlFor="generated-link"
+                className="mb-3 block text-xs font-medium text-[#6f6b62]"
+              >
+                Tautan sekali baca
+              </label>
               <input
+                id="generated-link"
                 type="text"
                 readOnly
+                autoFocus
                 value={generatedLink}
-                className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-sky-300 font-mono focus:outline-none"
+                onFocus={(e) => e.currentTarget.select()}
+                className="min-h-11 w-full min-w-0 rounded-md border border-[#e5e2d9] bg-[#f8f7f2] px-3 py-2 font-mono text-sm text-[#454239] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a4492c]"
               />
               <button
+                type="button"
                 onClick={handleCopy}
-                className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-xs font-semibold text-white shrink-0 transition cursor-pointer"
+                className={`${buttonClassName} mt-3 w-full`}
               >
-                {copied ? "Tersalin!" : "Salin"}
+                <span role="status" aria-live="polite">
+                  {copied ? "Tautan tersalin" : "Salin tautan"}
+                </span>
+                <span aria-hidden="true">{copied ? "✓" : "↗"}</span>
               </button>
             </div>
+            <p className="mt-4 text-sm leading-6 text-[#6f6b62]">
+              <span className="font-medium text-[#454239]">Jangan dibuka dulu.</span>{" "}
+              Tautan hanya bisa dibuka sekali, termasuk olehmu sendiri.
+            </p>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="mt-6 rounded py-1 text-sm font-medium text-[#454239] underline decoration-[#c9c4b7] underline-offset-4 transition-colors hover:text-[#a4492c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a4492c] motion-reduce:transition-none"
+            >
+              Tulis pesan baru
+            </button>
           </div>
+        )}
 
-          <button
-            onClick={() => setGeneratedLink("")}
-            className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-200 transition cursor-pointer"
+        {error && (
+          <p
+            role="alert"
+            className="mt-4 rounded-lg border border-[#e8c9bd] bg-[#fbefea] px-4 py-3 text-sm leading-6 text-[#963d27]"
           >
-            Buat Pesan Rahasia Baru
-          </button>
-        </div>
-      )}
+            {error}
+          </p>
+        )}
+      </section>
+
+      <footer className="mt-10 flex items-start gap-2 border-t border-[#dfdcd3] pt-5 text-xs leading-5 text-[#817c70] sm:mt-12">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          className="mt-0.5 size-4 shrink-0"
+        >
+          <rect x="3.5" y="7" width="9" height="7" rx="1.5" />
+          <path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7" />
+        </svg>
+        <p>Enkripsi end-to-end. Kami tidak bisa membaca isi pesanmu.</p>
+      </footer>
     </div>
   );
 }
