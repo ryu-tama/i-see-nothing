@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BurnNote
 
-## Getting Started
+**Zero-Knowledge, End-to-End Encrypted, Burn-After-Reading Secret Sharing Application.**
 
-First, run the development server:
+BurnNote memungkinkan pengguna membagikan informasi sensitif (password, API key, token kredensial, atau catatan rahasia) melalui tautan sekali pakai. Seluruh proses enkripsi dan dekripsi terjadi sepenuhnya di sisi klien (*browser*), sementara server hanya menyimpan *ciphertext* sementara yang langsung dimusnahkan begitu dibaca satu kali atau melewati batas waktu kedaluwarsa (TTL).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## Arsitektur Keamanan (Zero-Knowledge Design)
+
+BurnNote dirancang dengan prinsip bahwa **server tidak boleh pernah mengetahui isi pesan maupun kunci dekripsinya**:
+
+1. **Client-Side Encryption (Web Crypto API):**
+   - Pesan dienkripsi langsung di browser pengirim menggunakan algoritma **AES-GCM 256-bit** dengan *Initialization Vector* (IV) acak 96-bit yang unik untuk setiap pesan.
+2. **URL Fragment Key Storage (`#key`):**
+   - Kunci dekripsi disisipkan ke dalam bagian *URL fragment* (`https://domain.com/secret/[id]#[key]`).
+   - Berdasarkan spesifikasi HTTP, bagian setelah tanda `#` tidak pernah dikirimkan oleh browser ke server dalam *HTTP Request*, sehingga administrator server maupun log jaringan tidak dapat mendekripsi data yang tersimpan.
+3. **Burn-After-Reading & TTL Enforcement:**
+   - Endpoint pembacaan (`/api/secrets/[id]`) menggunakan metode `POST` (bukan `GET`) dan memerlukan konfirmasi eksplisit pengguna untuk mencegah *link preview bot* (seperti WhatsApp, Telegram, atau Slack) menghanguskan pesan secara tidak sengaja.
+   - Begitu *ciphertext* diambil, data langsung dihapus permanen dari penyimpanan server.
+
+---
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+- **Cryptography:** Native Browser Web Crypto API (`SubtleCrypto` — AES-GCM 256-bit)
+- **Deployment:** Vercel
+
+---
+
+## Struktur Proyek
+
+```text
+burn-note/
+├── app/
+│   ├── api/
+│   │   └── secrets/
+│   │       ├── route.ts          # Endpoint POST untuk menyimpan ciphertext & TTL
+│   │       └── [id]/
+│   │           └── route.ts      # Endpoint POST untuk mengambil & menghapus pesan (one-time read)
+│   ├── secret/
+│   │   └── [id]/
+│   │       └── page.tsx          # Halaman penerima & dekripsi sisi klien
+│   ├── layout.tsx
+│   └── page.tsx                  # Halaman utama pembuatan pesan rahasia
+├── lib/
+│   ├── crypto.ts                 # Modul enkripsi/dekripsi AES-GCM (Web Crypto API)
+│   └── store.ts                  # Penyimpanan sementara in-memory & pembersihan TTL
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Menjalankan Secara Lokal
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Clone repositori:**
+   ```bash
+   git clone [https://github.com/ryu-tama/burn-note.git](https://github.com/ryu-tama/burn-note.git)
+   cd burn-note
+   ```
 
-## Learn More
+2. **Instal dependensi:**
+   ```bash
+   npm install
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. **Jalankan server pengembangan:**
+   ```bash
+   npm run dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. Buka `http://localhost:3000` di browser.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Batasan Saat Ini & Roadmap Pengembangan (AppSec Hardening)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Versi ini merupakan *Minimum Viable Product* (MVP) yang menggunakan penyimpanan *in-memory* (`Map`). Rencana peningkatan keamanan dan skalabilitas berikutnya meliputi:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [ ] **Persistent Serverless Storage:** Migrasi dari penyimpanan memori lokal ke **Upstash Redis** untuk mendukung *atomic one-time read* (`GETDEL`) di lingkungan *serverless* multi-instance.
+- [ ] **Rate Limiting:** Pembatasan frekuensi *request* pada endpoint `/api/secrets` untuk mencegah serangan *Denial of Service* (DoS) / kehabisan memori.
+- [ ] **Content Security Policy (CSP):** Penambahan *HTTP Security Headers* yang ketat untuk memitigasi risiko *Cross-Site Scripting* (XSS) yang berpotensi mencuri *URL fragment*.
+- [ ] **Optional Passphrase Layer:** Penambahan kata sandi kedua (*PBKDF2 key derivation*) di atas kunci URL untuk perlindungan ekstra.
