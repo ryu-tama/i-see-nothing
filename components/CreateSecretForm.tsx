@@ -292,7 +292,7 @@ export default function CreateSecretForm() {
           </p>
         </div>
         <div className="flex gap-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#252420]">v4.0.0</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#252420]">v1.2.0</span>
           <span className="text-[10px] font-bold uppercase tracking-widest text-[#252420]">Open Source</span>
         </div>
       </footer>
