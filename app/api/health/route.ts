@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/src/lib/supabaseAdmin";
 
-export const dynamic = "force-dynamic";
-
 export async function GET() {
   try {
     // Query super ringan agar Supabase tetap tercatat aktif
